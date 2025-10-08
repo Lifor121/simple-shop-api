@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+venv/
+env/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints
+
+# Docker
+.dockerignore
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.bak
+*.swo
+
+# Database
+*.sqlite3
+*.db
+
+# logs
+*.log
