@@ -1,0 +1,20 @@
+fastapi
+uvicorn[standard]
+psycopg2-binary # Драйвер для PostgreSQL
+sqlalchemy[asyncio] # Асинхронная версия SQLAlchemy
+alembic
+pydantic # FastAPI использует Pydantic для валидации данных
+python-jose[cryptography] # Для JWT
+passlib[bcrypt] # Для хеширования паролей
+redis # Для Redis клиента
+aio-pika # Для асинхронной работы с RabbitMQ
+python-multipart # Для обработки форм в FastAPI (если потребуется)
+SQLAlchemy>=1.4
+asyncpg
+
+# Для тестирования
+pytest
+pytest-asyncio
+httpx # Асинхронный HTTP-клиент для тестирования FastAPI
+fakeredis # Для мокирования Redis в тестах
+pytest-cov # Для отчета о покрытии тестов
