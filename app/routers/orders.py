@@ -1,0 +1,133 @@
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete, update
+from sqlalchemy.orm import selectinload
+from app.database import get_async_session
+from app.schemas.order import OrderCreate, OrderStatus, OrderResponse
+from app.schemas.product import ProductResponse
+from app.models import Order, Product, User, OrderStatus as OrderStatusModel
+from app.dependencies import get_current_active_user
+from typing import Any, Literal
+from datetime import datetime
+
+
+router = APIRouter()
+
+
+@router.get("/orders", response_model=list[OrderResponse])
+async def read_orders(
+    status: Literal["pending", "completed", "cancelled"] | None = Query(
+        None, description="Filter orders by status"
+    ),
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    query = select(Order).where(Order.user_id == current_user.id)
+
+    if status:
+        query = query.where(Order.status == status)
+
+    query = query.offset(skip).limit(limit)
+
+    result = await db.execute(query)
+    orders = result.scalars().all()
+    return orders
+
+
+@router.post(
+    "/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_order(
+    order: OrderCreate,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    # Проверим, существует ли продукт
+    product_result = await db.execute(
+        select(Product).where(Product.id == order.product_id)
+    )
+    product = product_result.scalars().first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
+
+    db_order = Order(
+        user_id=current_user.id,
+        product_id=order.product_id,
+        quantity=order.quantity,
+        status="pending",
+    )
+    db.add(db_order)
+    await db.commit()
+    await db.refresh(db_order)
+    return db_order
+
+
+@router.get("/orders/{order_id}", response_model=OrderResponse)
+async def read_order(
+    order_id: int,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    result = await db.execute(
+        select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
+    )
+    order = result.scalars().first()
+    if order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found or you don't have permission to view it",
+        )
+    return order
+
+
+@router.put("/orders/{order_id}", response_model=OrderResponse)
+async def update_order_status(
+    order_id: int,
+    order_status: OrderStatus,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    # Используем update для атомарного обновления в базе данных
+    stmt = (
+        update(Order)
+        .where(Order.id == order_id, Order.user_id == current_user.id)
+        .values(status=order_status.status)
+    )
+    result = await db.execute(stmt)
+
+    if result.rowcount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found or you don't have permission to update it",
+        )
+
+    await db.commit()
+
+    updated_order = await db.get(Order, order_id)
+
+    return updated_order
+
+
+@router.delete("/orders/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_order(
+    order_id: int,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    result = await db.execute(
+        select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
+    )
+    order = result.scalars().first()
+    if order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found or you don't have permission to delete it",
+        )
+
+    await db.delete(order)
+    await db.commit()
+    return {"message": "Order deleted successfully"}

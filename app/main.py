@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.routers import auth
-# from app.routers import products # Будут добавлены позже
-# from app.routers import orders # Будут добавлены позже
+from app.routers import products
+from app.routers import orders
 
 app = FastAPI(
     title="Simple Shop API",
@@ -16,5 +16,5 @@ async def root():
 
 
 app.include_router(auth.router, prefix="/api", tags=["Auth"])
-# app.include_router(products.router, prefix="/api", tags=["Products"])
-# app.include_router(orders.router, prefix="/api", tags=["Orders"])
+app.include_router(products.router, prefix="/api", tags=["Products"])
+app.include_router(orders.router, prefix="/api", tags=["Orders"])
