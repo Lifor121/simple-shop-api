@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 import json
 from typing import Any, Literal
 from datetime import datetime
+from app.broker import send_message
 
 
 router = APIRouter()
@@ -46,7 +47,7 @@ async def read_orders(
     orders = result.scalars().all()
 
     order_responses = [OrderResponse.from_orm(o) for o in orders]
-    orders_for_cache = [o.model_dump(mode='json') for o in order_responses]
+    orders_for_cache = [o.model_dump(mode="json") for o in order_responses]
     await redis.set(cache_key, json.dumps(orders_for_cache), ex=CACHE_TTL)
 
     return order_responses
@@ -83,6 +84,23 @@ async def create_order(
     keys = await redis.keys(f"orders:{current_user.id}:*")
     if keys:
         await redis.delete(*keys)
+
+    # RabbitMQ: Отправка события
+    # Приводим статус к строке, если это Enum, чтобы избежать ошибок JSON
+    status_value = (
+        db_order.status.value if hasattr(db_order.status, "value") else db_order.status
+    )
+
+    await send_message(
+        event_type="order_created",
+        data={
+            "id": db_order.id,
+            "user_id": db_order.user_id,
+            "product_id": db_order.product_id,
+            "quantity": db_order.quantity,
+            "status": status_value,
+        },
+    )
 
     return db_order
 
@@ -160,5 +178,5 @@ async def delete_order(
     keys = await redis.keys(f"orders:{current_user.id}:*")
     if keys:
         await redis.delete(*keys)
-        
+
     return {"message": "Order deleted successfully"}

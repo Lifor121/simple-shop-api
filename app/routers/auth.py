@@ -8,6 +8,7 @@ from app.schemas.token import Token
 from app.security import create_access_token, hash_password, verify_password
 from app.models import User
 from datetime import timedelta
+from app.broker import send_message
 
 router = APIRouter()
 
@@ -33,6 +34,17 @@ async def register_user(
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+
+    # RabbitMQ: Отправка события
+    await send_message(
+        event_type="user_registered",
+        data={
+            "id": new_user.id,
+            "email": new_user.email,
+            "is_active": new_user.is_active,
+        },
+    )
+
     return new_user
 
 
@@ -41,9 +53,7 @@ async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_async_session),
 ):
-    user_result = await db.execute(
-        select(User).where(User.email == form_data.username)
-    )
+    user_result = await db.execute(select(User).where(User.email == form_data.username))
     user_in_db = user_result.scalars().first()
 
     if not user_in_db or not verify_password(
