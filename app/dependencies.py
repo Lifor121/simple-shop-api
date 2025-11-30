@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.database import get_async_session
 from app.models import User
 from app.security import decode_access_token
@@ -13,9 +14,7 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_async_session)
 ):
     token_data = decode_access_token(token)
-    user_result = await db.execute(
-        User.__table__.select().where(User.email == token_data.email)
-    )
+    user_result = await db.execute(select(User).where(User.email == token_data.email))
     current_user = user_result.scalars().first()
 
     if current_user is None:

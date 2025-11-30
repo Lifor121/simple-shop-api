@@ -4,14 +4,18 @@ from sqlalchemy import select, delete, update
 from sqlalchemy.orm import selectinload
 from app.database import get_async_session
 from app.schemas.order import OrderCreate, OrderStatus, OrderResponse
-from app.schemas.product import ProductResponse
-from app.models import Order, Product, User, OrderStatus as OrderStatusModel
+from app.models import Order, Product, User
 from app.dependencies import get_current_active_user
+from app.cache import get_redis_client
+from redis.asyncio import Redis
+import json
 from typing import Any, Literal
 from datetime import datetime
 
 
 router = APIRouter()
+
+CACHE_TTL = 60
 
 
 @router.get("/orders", response_model=list[OrderResponse])
@@ -23,7 +27,14 @@ async def read_orders(
     limit: int = 100,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    redis: Redis = Depends(get_redis_client),
 ):
+    cache_key = f"orders:{current_user.id}:{status}:{skip}:{limit}"
+    cached_orders = await redis.get(cache_key)
+
+    if cached_orders:
+        return json.loads(cached_orders)
+
     query = select(Order).where(Order.user_id == current_user.id)
 
     if status:
@@ -33,7 +44,12 @@ async def read_orders(
 
     result = await db.execute(query)
     orders = result.scalars().all()
-    return orders
+
+    order_responses = [OrderResponse.from_orm(o) for o in orders]
+    orders_for_cache = [o.model_dump(mode='json') for o in order_responses]
+    await redis.set(cache_key, json.dumps(orders_for_cache), ex=CACHE_TTL)
+
+    return order_responses
 
 
 @router.post(
@@ -43,8 +59,8 @@ async def create_order(
     order: OrderCreate,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    redis: Redis = Depends(get_redis_client),
 ):
-    # Проверим, существует ли продукт
     product_result = await db.execute(
         select(Product).where(Product.id == order.product_id)
     )
@@ -63,6 +79,11 @@ async def create_order(
     db.add(db_order)
     await db.commit()
     await db.refresh(db_order)
+
+    keys = await redis.keys(f"orders:{current_user.id}:*")
+    if keys:
+        await redis.delete(*keys)
+
     return db_order
 
 
@@ -90,8 +111,8 @@ async def update_order_status(
     order_status: OrderStatus,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    redis: Redis = Depends(get_redis_client),
 ):
-    # Используем update для атомарного обновления в базе данных
     stmt = (
         update(Order)
         .where(Order.id == order_id, Order.user_id == current_user.id)
@@ -107,6 +128,10 @@ async def update_order_status(
 
     await db.commit()
 
+    keys = await redis.keys(f"orders:{current_user.id}:*")
+    if keys:
+        await redis.delete(*keys)
+
     updated_order = await db.get(Order, order_id)
 
     return updated_order
@@ -117,6 +142,7 @@ async def delete_order(
     order_id: int,
     db: AsyncSession = Depends(get_async_session),
     current_user: User = Depends(get_current_active_user),
+    redis: Redis = Depends(get_redis_client),
 ):
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
@@ -130,4 +156,9 @@ async def delete_order(
 
     await db.delete(order)
     await db.commit()
+
+    keys = await redis.keys(f"orders:{current_user.id}:*")
+    if keys:
+        await redis.delete(*keys)
+        
     return {"message": "Order deleted successfully"}
