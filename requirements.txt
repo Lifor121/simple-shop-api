@@ -5,7 +5,7 @@ sqlalchemy[asyncio] # Асинхронная версия SQLAlchemy
 alembic
 pydantic # FastAPI использует Pydantic для валидации данных
 python-jose[cryptography] # Для JWT
-passlib[bcrypt] # Для хеширования паролей
+passlib==1.7.4
 redis # Для Redis клиента
 aio-pika # Для асинхронной работы с RabbitMQ
 python-multipart # Для обработки форм в FastAPI (если потребуется)
@@ -18,3 +18,5 @@ pytest-asyncio
 httpx # Асинхронный HTTP-клиент для тестирования FastAPI
 fakeredis # Для мокирования Redis в тестах
 pytest-cov # Для отчета о покрытии тестов
+email-validator
+bcrypt==3.2.0

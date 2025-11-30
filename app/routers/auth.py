@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.database import get_async_session
 from app.schemas.user import UserCreate, UserResponse, UserInDB
 from app.schemas.token import Token
@@ -41,7 +42,7 @@ async def login_for_access_token(
     db: AsyncSession = Depends(get_async_session),
 ):
     user_result = await db.execute(
-        User.__table__.select().where(User.email == form_data.username)
+        select(User).where(User.email == form_data.username)
     )
     user_in_db = user_result.scalars().first()
 
