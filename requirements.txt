@@ -15,8 +15,10 @@ asyncpg
 # Для тестирования
 pytest
 pytest-asyncio
+pytest-mock
 httpx # Асинхронный HTTP-клиент для тестирования FastAPI
 fakeredis # Для мокирования Redis в тестах
 pytest-cov # Для отчета о покрытии тестов
 email-validator
 bcrypt==3.2.0
+aiosqlite
